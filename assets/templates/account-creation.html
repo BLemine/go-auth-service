@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Welcome to Dxpire</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <style>
+        /* Basic reset for email clients */
+        body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            color: #111;
+        }
+
+        img {
+            border: 0;
+            outline: none;
+            text-decoration: none;
+        }
+
+        table {
+            border-collapse: collapse;
+        }
+
+        /* Layout */
+        .wrapper {
+            width: 100%;
+            background: #ffffff;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 24px;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Typography */
+        h1 {
+            font-size: 24px;
+            margin: 0 0 12px;
+        }
+
+        p {
+            font-size: 15px;
+            line-height: 1.56;
+            margin: 0 0 16px;
+        }
+
+        /* Button */
+        .btn-wrap {
+            text-align: center;
+            margin: 28px 0;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 24px;
+            font-size: 15px;
+            font-weight: bold;
+            color: #ffffff;
+            background: #111;
+            text-decoration: none;
+            border-radius: 6px;
+        }
+
+        /* Card-ish block */
+        .panel {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 12px;
+            background: #fafafa;
+        }
+
+        /* Footer */
+        .hr {
+            height: 1px;
+            background: #e5e7eb;
+            border: 0;
+            margin: 24px 0;
+        }
+
+        .muted {
+            color: #555;
+            font-size: 13px;
+        }
+
+        .link {
+            color: #111;
+            text-decoration: underline;
+        }
+
+        /* Code-like highlight (optional) */
+        .mono {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        }
+
+        /* Mobile */
+        @media (max-width: 620px) {
+            .container {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="wrapper">
+    <div class="container">
+
+        <h1>Welcome to Dxpire, {{.clientName}} 🎉</h1>
+        <p>
+            Your account has been created successfully. You can jump right in to manage your documents,
+            set expirations, and receive timely reminders so you never miss a renewal.
+        </p>
+
+        <div class="btn-wrap">
+            <a class="btn" href="{{.frontendUrl}}" target="_blank" rel="noopener" style="color: white">Go to your dashboard</a>
+        </div>
+
+        <div class="panel">
+            <p class="muted">
+                If the button doesn’t work, copy and paste this link into your browser:
+            </p>
+            <p class="muted mono">{{.frontendUrl}}</p>
+        </div>
+
+        <hr class="hr"/>
+
+        <p class="muted">
+            Need help? Reply to this email or contact us at
+            <a class="link" href="mailto:{{.supportEmail}}">{{.supportEmail}}</a>.
+        </p>
+        <p class="muted">
+            You’re receiving this because an account was created on {{.AppName}} using this email address.
+            If this wasn’t you, please let us know.
+        </p>
+
+    </div>
+</div>
+</body>
+</html>

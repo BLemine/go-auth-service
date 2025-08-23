@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Verify your email address</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #111;
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 16px;
+        }
+
+        p {
+            font-size: 15px;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .code-section {
+            margin: 32px 0;
+            text-align: center;
+        }
+
+        .code-label {
+            font-weight: bold;
+            font-size: 16px;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .code-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 8px 0;
+        }
+
+        .code-expiry {
+            font-size: 14px;
+            color: #555;
+        }
+
+        .footer {
+            font-size: 13px;
+            color: #555;
+            border-top: 1px solid #e0e0e0;
+            padding-top: 16px;
+            margin-top: 24px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Verify your email address</h1>
+    <p>
+        Thanks for starting the <b>Dxpire</b> account creation process. We want to make sure it’s really you.
+        Please enter the following verification code when prompted.
+        If you don't want to create an account, you can ignore this message.
+    </p>
+
+    <div class="code-section">
+        <span class="code-label">Verification code</span>
+        <div class="code-value">{{.verificationCode}}</div>
+        <div class="code-expiry">(This code is valid for {{.validityInMinutes}} minutes)</div>
+    </div>
+
+    <div class="footer">
+        <b>Dxpire</b> will never email you and ask you to disclose or verify your password,
+        credit card, or banking account number.
+    </div>
+</div>
+</body>
+</html>

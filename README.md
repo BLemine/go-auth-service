@@ -24,6 +24,7 @@
 - `POST /auth/reset-password/otp`
 - `POST /auth/reset-password`
 - `GET /auth/me` (protected)
+- Swagger UI: `http://localhost:8080/swagger/index.html`
 
 ## Examples
 

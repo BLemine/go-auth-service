@@ -19,6 +19,16 @@ import (
 	"go.mongodb.org/mongo-driver/v2/mongo"
 )
 
+// @Summary Sign in
+// @Description Authenticate with username and password.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.LoginRequest true "Login request"
+// @Success 200 {object} models.LoginResponse
+// @Failure 400 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /signIn [post]
 func getToken(w http.ResponseWriter, r *http.Request) {
 	// Parse the request body
 	var loginReq models.LoginRequest
@@ -107,6 +117,17 @@ func getToken(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, loginResponse)
 }
 
+// @Summary Refresh access token
+// @Description Exchange a refresh token for a new access token and refresh token.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.RefreshTokenRequest true "Refresh token request"
+// @Success 200 {object} models.LoginResponse
+// @Failure 400 {object} models.BaseResponse
+// @Failure 401 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /refreshToken [post]
 func refreshToken(w http.ResponseWriter, r *http.Request) {
 	authSessionCollection := utils.GetDatabaseCollection("auth-session")
 	ctx, cancel := utils.GetDatabaseContext()
@@ -230,6 +251,16 @@ func refreshToken(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, loginResponse)
 }
 
+// @Summary Logout
+// @Description Invalidate an access token or refresh token.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.LogoutRequest false "Logout request"
+// @Success 200 {object} models.BaseResponse
+// @Failure 400 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /logout [post]
 func logout(w http.ResponseWriter, r *http.Request) {
 	var logoutRequest models.LogoutRequest
 	decodeErr := json.NewDecoder(r.Body).Decode(&logoutRequest)
@@ -299,6 +330,16 @@ func logout(w http.ResponseWriter, r *http.Request) {
 	lastname,
 	email
 */
+// @Summary Send signup OTP
+// @Description Starts registration by sending an email OTP.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.SignUpEmailValidation true "Signup email request"
+// @Success 200 {string} string "Check your email for the verification code"
+// @Failure 400 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /signUp/email [post]
 func sendSignUpEmailOtp(w http.ResponseWriter, r *http.Request) {
 	var emailValidationRequest models.SignUpEmailValidation
 	requestErr := utils.DecodeJSONRequest(r, &emailValidationRequest)
@@ -398,6 +439,16 @@ func sendSignUpEmailOtp(w http.ResponseWriter, r *http.Request) {
 	code,
 	email
 */
+// @Summary Confirm signup OTP
+// @Description Confirms the signup OTP and marks email verified.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.SignUpEmailOtpConfirmation true "Signup OTP confirmation"
+// @Success 200 {string} string "OTP confirmed successfully"
+// @Failure 400 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /signUp/otp [post]
 func confirmSignUpOtp(w http.ResponseWriter, r *http.Request) {
 	var emailOtpConfirmationRequest models.SignUpEmailOtpConfirmation
 	requestErr := utils.DecodeJSONRequest(r, &emailOtpConfirmationRequest)
@@ -493,6 +544,16 @@ func confirmSignUpOtp(w http.ResponseWriter, r *http.Request) {
 	password,
 	passwordConfirmation
 */
+// @Summary Complete registration
+// @Description Finalizes registration with password and sends welcome email.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.SignUpPersonalDetailsRequest true "Signup personal details"
+// @Success 200 {string} string "User added successfully"
+// @Failure 400 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /signUp/personal-details [post]
 func addSignUpPersonalDetails(w http.ResponseWriter, r *http.Request) {
 	var signUpPersonalDetailsRequest models.SignUpPersonalDetailsRequest
 	requestErr := utils.DecodeJSONRequest(r, &signUpPersonalDetailsRequest)
@@ -599,6 +660,16 @@ func addSignUpPersonalDetails(w http.ResponseWriter, r *http.Request) {
 
 	email
 */
+// @Summary Send reset-password OTP
+// @Description Sends a password reset OTP to the user email.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.PasswordResetEmailRequest true "Password reset email"
+// @Success 200 {string} string "Check your email for the verification code"
+// @Failure 400 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /reset-password/email [post]
 func sendPasswordResetOtp(w http.ResponseWriter, r *http.Request) {
 	var resetRequest models.PasswordResetEmailRequest
 	requestErr := utils.DecodeJSONRequest(r, &resetRequest)
@@ -642,6 +713,16 @@ func sendPasswordResetOtp(w http.ResponseWriter, r *http.Request) {
 	code,
 	email
 */
+// @Summary Confirm reset-password OTP
+// @Description Confirms the password reset OTP.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.PasswordResetOtpConfirmation true "Password reset OTP confirmation"
+// @Success 200 {string} string "OTP confirmed successfully"
+// @Failure 400 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /reset-password/otp [post]
 func confirmPasswordResetOtp(w http.ResponseWriter, r *http.Request) {
 	var resetOtpRequest models.PasswordResetOtpConfirmation
 	requestErr := utils.DecodeJSONRequest(r, &resetOtpRequest)
@@ -716,6 +797,16 @@ func confirmPasswordResetOtp(w http.ResponseWriter, r *http.Request) {
 	password,
 	passwordConfirmation
 */
+// @Summary Reset password
+// @Description Resets the user password after OTP verification.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param payload body models.PasswordResetRequest true "Password reset request"
+// @Success 200 {string} string "Password reset successfully"
+// @Failure 400 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /reset-password [post]
 func resetPassword(w http.ResponseWriter, r *http.Request) {
 	var resetPasswordRequest models.PasswordResetRequest
 	requestErr := utils.DecodeJSONRequest(r, &resetPasswordRequest)
@@ -793,6 +884,15 @@ func resetPassword(w http.ResponseWriter, r *http.Request) {
 	utils.WriteResponse(w, "Password reset successfully")
 }
 
+// @Summary Get current user
+// @Description Returns token claims for the current user.
+// @Tags auth
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} map[string]any
+// @Failure 401 {object} models.BaseResponse
+// @Failure 500 {object} models.BaseResponse
+// @Router /me [get]
 func getMe(w http.ResponseWriter, r *http.Request) {
 	claims, ok := helpers.GetAuthClaims(r)
 	if !ok {

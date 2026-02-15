@@ -1,0 +1,398 @@
+basePath: /auth
+definitions:
+  models.BaseResponse:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+    type: object
+  models.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  models.LoginResponse:
+    properties:
+      refreshToken:
+        type: string
+      refreshTokenExpiration:
+        type: integer
+      token:
+        type: string
+      tokenExpiration:
+        type: integer
+    type: object
+  models.LogoutRequest:
+    properties:
+      refreshToken:
+        type: string
+      token:
+        type: string
+    type: object
+  models.PasswordResetEmailRequest:
+    properties:
+      email:
+        type: string
+    type: object
+  models.PasswordResetOtpConfirmation:
+    properties:
+      code:
+        type: string
+      email:
+        type: string
+    type: object
+  models.PasswordResetRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+      passwordConfirmation:
+        type: string
+    type: object
+  models.RefreshTokenRequest:
+    properties:
+      refreshToken:
+        type: string
+    type: object
+  models.SignUpEmailOtpConfirmation:
+    properties:
+      code:
+        type: string
+      email:
+        type: string
+    type: object
+  models.SignUpEmailValidation:
+    properties:
+      email:
+        type: string
+      firstname:
+        type: string
+      lastname:
+        type: string
+    type: object
+  models.SignUpPersonalDetailsRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+      passwordConfirmation:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Authentication microservice with JWT, refresh tokens, registration,
+    and password reset flows.
+  title: Go Auth Service
+  version: "1.0"
+paths:
+  /logout:
+    post:
+      consumes:
+      - application/json
+      description: Invalidate an access token or refresh token.
+      parameters:
+      - description: Logout request
+        in: body
+        name: payload
+        schema:
+          $ref: '#/definitions/models.LogoutRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Logout
+      tags:
+      - auth
+  /me:
+    get:
+      description: Returns token claims for the current user.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - auth
+  /refreshToken:
+    post:
+      consumes:
+      - application/json
+      description: Exchange a refresh token for a new access token and refresh token.
+      parameters:
+      - description: Refresh token request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/models.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Refresh access token
+      tags:
+      - auth
+  /reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Resets the user password after OTP verification.
+      parameters:
+      - description: Password reset request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/models.PasswordResetRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Password reset successfully
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Reset password
+      tags:
+      - auth
+  /reset-password/email:
+    post:
+      consumes:
+      - application/json
+      description: Sends a password reset OTP to the user email.
+      parameters:
+      - description: Password reset email
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/models.PasswordResetEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Check your email for the verification code
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Send reset-password OTP
+      tags:
+      - auth
+  /reset-password/otp:
+    post:
+      consumes:
+      - application/json
+      description: Confirms the password reset OTP.
+      parameters:
+      - description: Password reset OTP confirmation
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/models.PasswordResetOtpConfirmation'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OTP confirmed successfully
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Confirm reset-password OTP
+      tags:
+      - auth
+  /signIn:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate with username and password.
+      parameters:
+      - description: Login request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Sign in
+      tags:
+      - auth
+  /signUp/email:
+    post:
+      consumes:
+      - application/json
+      description: Starts registration by sending an email OTP.
+      parameters:
+      - description: Signup email request
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/models.SignUpEmailValidation'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Check your email for the verification code
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Send signup OTP
+      tags:
+      - auth
+  /signUp/otp:
+    post:
+      consumes:
+      - application/json
+      description: Confirms the signup OTP and marks email verified.
+      parameters:
+      - description: Signup OTP confirmation
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/models.SignUpEmailOtpConfirmation'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OTP confirmed successfully
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Confirm signup OTP
+      tags:
+      - auth
+  /signUp/personal-details:
+    post:
+      consumes:
+      - application/json
+      description: Finalizes registration with password and sends welcome email.
+      parameters:
+      - description: Signup personal details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/models.SignUpPersonalDetailsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User added successfully
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/models.BaseResponse'
+      summary: Complete registration
+      tags:
+      - auth
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

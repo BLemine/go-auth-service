@@ -1,13 +1,17 @@
 package routers
 
 import (
+	"encoding/json"
 	"errors"
 	"go-auth-service/helpers"
 	"go-auth-service/models"
 	"go-auth-service/utils"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -118,6 +122,14 @@ func refreshToken(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if refreshTokenRequest.RefreshToken == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		render.JSON(w, r, models.BaseResponse{
+			Code:    001,
+			Message: "Refresh token is required",
+		})
+		return
+	}
 
 	filter := bson.D{
 		{"connections", bson.D{
@@ -139,6 +151,14 @@ func refreshToken(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		render.JSON(w, r, models.BaseResponse{
 			Code: 1, Message: "Internal server error",
+		})
+		return
+	}
+
+	if _, err := helpers.ValidateJWT(refreshTokenRequest.RefreshToken); err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		render.JSON(w, r, models.BaseResponse{
+			Code: 1, Message: "Invalid or expired refresh-token",
 		})
 		return
 	}
@@ -174,6 +194,31 @@ func refreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	_, updateErr := authSessionCollection.UpdateOne(
+		ctx,
+		bson.D{
+			{"userEmail", retrievedSession.UserEmail},
+			{"connections", bson.D{
+				{"$elemMatch", bson.D{
+					{"refreshToken", refreshTokenRequest.RefreshToken},
+				}},
+			}},
+		},
+		bson.D{{"$set", bson.D{
+			{"connections.$.token", tokenStr},
+			{"connections.$.refreshToken", refreshTokenStr},
+			{"connections.$.expiration", tokenExpirationInMinutes},
+			{"connections.$.creationDate", bson.NewDateTimeFromTime(time.Now())},
+		}}},
+	)
+	if updateErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		render.JSON(w, r, models.BaseResponse{
+			Code: 1, Message: "Internal server error",
+		})
+		return
+	}
+
 	// build response
 	loginResponse := models.LoginResponse{
 		Token:                  tokenStr,
@@ -185,7 +230,67 @@ func refreshToken(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, loginResponse)
 }
 
-func logout(w http.ResponseWriter, r *http.Request) {}
+func logout(w http.ResponseWriter, r *http.Request) {
+	var logoutRequest models.LogoutRequest
+	decodeErr := json.NewDecoder(r.Body).Decode(&logoutRequest)
+	if decodeErr != nil && !errors.Is(decodeErr, io.EOF) {
+		w.WriteHeader(http.StatusBadRequest)
+		render.JSON(w, r, models.BaseResponse{
+			Code:    001,
+			Message: "Invalid request body",
+		})
+		return
+	}
+
+	if logoutRequest.Token == "" && logoutRequest.RefreshToken == "" {
+		authHeader := r.Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			logoutRequest.Token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
+
+	if logoutRequest.Token == "" && logoutRequest.RefreshToken == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		render.JSON(w, r, models.BaseResponse{
+			Code:    001,
+			Message: "Token or refresh token is required",
+		})
+		return
+	}
+
+	authSessionCollection := utils.GetDatabaseCollection("auth-session")
+	ctx, cancel := utils.GetDatabaseContext()
+	defer cancel()
+
+	selector := bson.A{}
+	if logoutRequest.Token != "" {
+		selector = append(selector, bson.D{{"token", logoutRequest.Token}})
+	}
+	if logoutRequest.RefreshToken != "" {
+		selector = append(selector, bson.D{{"refreshToken", logoutRequest.RefreshToken}})
+	}
+
+	_, updateErr := authSessionCollection.UpdateOne(
+		ctx,
+		bson.D{{"connections", bson.D{{"$elemMatch", bson.D{{"$or", selector}}}}}},
+		bson.D{{"$pull", bson.D{
+			{"connections", bson.D{{"$or", selector}}},
+		}}},
+	)
+	if updateErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		render.JSON(w, r, models.BaseResponse{
+			Code:    001,
+			Message: "Internal server error",
+		})
+		return
+	}
+
+	render.JSON(w, r, models.BaseResponse{
+		Code:    0,
+		Message: "Logged out successfully",
+	})
+}
 
 /*
 @body
@@ -200,6 +305,12 @@ func sendSignUpEmailOtp(w http.ResponseWriter, r *http.Request) {
 	if requestErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		utils.WriteResponse(w, "Invalid request body")
+		return
+	}
+	if emailValidationRequest.Email == "" || emailValidationRequest.Firstname == "" || emailValidationRequest.Lastname == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Firstname, lastname, and email are required")
+		return
 	}
 	// Check if the email already exists
 	usersCollection := utils.GetDatabaseCollection("users")
@@ -245,6 +356,9 @@ func sendSignUpEmailOtp(w http.ResponseWriter, r *http.Request) {
 			{"username", emailValidationRequest.Email},
 			{"password", "<PASSWORD>"},
 			{"status", "DRAFT"},
+			{"firstname", emailValidationRequest.Firstname},
+			{"lastname", emailValidationRequest.Lastname},
+			{"isEmailVerified", false},
 		})
 
 		if insertionErr != nil {
@@ -256,7 +370,21 @@ func sendSignUpEmailOtp(w http.ResponseWriter, r *http.Request) {
 
 		log.Println("Inserted user id :: ", insertedUser.InsertedID)
 	} else {
-		// DO nothing
+		_, updateErr := usersCollection.UpdateOne(ctx, bson.D{
+			{"email", emailValidationRequest.Email},
+			{"status", "DRAFT"},
+		}, bson.D{
+			{"$set", bson.D{
+				{"firstname", emailValidationRequest.Firstname},
+				{"lastname", emailValidationRequest.Lastname},
+			}},
+		})
+		if updateErr != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			utils.WriteResponse(w, "Internal server error")
+			log.Println("Oops couldn't update the draft user::: ", updateErr)
+			return
+		}
 	}
 
 	// Email OTP handling
@@ -278,6 +406,11 @@ func confirmSignUpOtp(w http.ResponseWriter, r *http.Request) {
 		utils.WriteResponse(w, "Invalid request body")
 		return
 	}
+	if emailOtpConfirmationRequest.Email == "" || emailOtpConfirmationRequest.Code == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Email and code are required")
+		return
+	}
 
 	otpCollection := utils.GetDatabaseCollection("otp")
 	otpCtx, otpCancel := utils.GetDatabaseContext()
@@ -290,6 +423,11 @@ func confirmSignUpOtp(w http.ResponseWriter, r *http.Request) {
 		{"userEmail", emailOtpConfirmationRequest.Email},
 	}).Decode(&existingOtp)
 
+	if errors.Is(otpSelectionErr, mongo.ErrNoDocuments) {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Invalid OTP")
+		return
+	}
 	if otpSelectionErr != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		utils.WriteResponse(w, "Internal server error")
@@ -311,25 +449,41 @@ func confirmSignUpOtp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var otpNotFound = existingOtp.Id == bson.NilObjectID
-	if otpNotFound {
+	diff := utils.GetDifferenceAbsTwoDatesInMinutes(existingOtp.CreationDate, utils.GetCurrentDateToTime())
+	if diff > 5 {
 		w.WriteHeader(http.StatusBadRequest)
-		utils.WriteResponse(w, "Invalid OTP")
-		return
-	} else {
-		// update the otp
-		otpCollection.FindOneAndUpdate(otpCtx, bson.D{
-			{"_id", existingOtp.Id},
-		}, bson.D{
-			{"$set", bson.D{
-				{"isEmailVerified", true},
-			}},
-		})
-
-		w.WriteHeader(http.StatusOK)
-		utils.WriteResponse(w, "OTP confirmed successfully")
+		utils.WriteResponse(w, "OTP has expired")
 		return
 	}
+
+	otpCollection.FindOneAndUpdate(otpCtx, bson.D{
+		{"_id", existingOtp.Id},
+	}, bson.D{
+		{"$set", bson.D{
+			{"isVerified", true},
+		}},
+	})
+
+	usersCollection := utils.GetDatabaseCollection("users")
+	userCtx, userCancel := utils.GetDatabaseContext()
+	defer userCancel()
+	_, userUpdateErr := usersCollection.UpdateOne(userCtx, bson.D{
+		{"email", emailOtpConfirmationRequest.Email},
+		{"status", "DRAFT"},
+	}, bson.D{
+		{"$set", bson.D{
+			{"isEmailVerified", true},
+		}},
+	})
+	if userUpdateErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.WriteResponse(w, "Internal server error")
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	utils.WriteResponse(w, "OTP confirmed successfully")
+	return
 }
 
 /*
@@ -345,6 +499,16 @@ func addSignUpPersonalDetails(w http.ResponseWriter, r *http.Request) {
 	if requestErr != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		utils.WriteResponse(w, "Invalid request body")
+		return
+	}
+	if signUpPersonalDetailsRequest.Email == "" || signUpPersonalDetailsRequest.Password == "" || signUpPersonalDetailsRequest.PasswordConfirmation == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Email, password and password confirmation are required")
+		return
+	}
+	if signUpPersonalDetailsRequest.Password != signUpPersonalDetailsRequest.PasswordConfirmation {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Password and confirmation do not match")
 		return
 	}
 
@@ -377,11 +541,39 @@ func addSignUpPersonalDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userUpdateErr := usersCollection.FindOneAndUpdate(ctx, bson.D{
+	otpCollection := utils.GetDatabaseCollection("otp")
+	otpCtx, otpCancel := utils.GetDatabaseContext()
+	defer otpCancel()
+	var verifiedOtp models.OTP
+	otpErr := otpCollection.FindOne(otpCtx, bson.D{
+		{"userEmail", signUpPersonalDetailsRequest.Email},
+		{"operationType", "SIGN_UP"},
+		{"isVerified", true},
+	}).Decode(&verifiedOtp)
+	if errors.Is(otpErr, mongo.ErrNoDocuments) {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "OTP verification required")
+		return
+	}
+	if otpErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.WriteResponse(w, "Internal server error")
+		return
+	}
+	diff := utils.GetDifferenceAbsTwoDatesInMinutes(verifiedOtp.CreationDate, utils.GetCurrentDateToTime())
+	if diff > 10 {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "OTP has expired")
+		return
+	}
+
+	_, userUpdateErr := usersCollection.UpdateOne(ctx, bson.D{
 		{"_id", user.Id},
-	}, bson.M{
-		"status":   "CONFIRMED",
-		"password": signUpPersonalDetailsRequest.Password,
+	}, bson.D{
+		{"$set", bson.D{
+			{"status", "CONFIRMED"},
+			{"password", utils.GetHashedData(signUpPersonalDetailsRequest.Password)},
+		}},
 	})
 
 	if userUpdateErr != nil {
@@ -390,9 +582,234 @@ func addSignUpPersonalDetails(w http.ResponseWriter, r *http.Request) {
 		log.Println("Oops couldn't update the user::: ", userUpdateErr)
 		return
 	}
-	// TODO: send mail to user
+
+	mailErr := helpers.SendAccountCreationMail(user)
+	if mailErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.WriteResponse(w, "Internal server error")
+		return
+	}
+
 	render.JSON(w, r, "User added successfully")
 
+}
+
+/*
+@body
+
+	email
+*/
+func sendPasswordResetOtp(w http.ResponseWriter, r *http.Request) {
+	var resetRequest models.PasswordResetEmailRequest
+	requestErr := utils.DecodeJSONRequest(r, &resetRequest)
+	if requestErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Invalid request body")
+		return
+	}
+	if resetRequest.Email == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Email is required")
+		return
+	}
+
+	usersCollection := utils.GetDatabaseCollection("users")
+	ctx, cancel := utils.GetDatabaseContext()
+	defer cancel()
+
+	var user models.User
+	userErr := usersCollection.FindOne(ctx, bson.D{
+		{"email", resetRequest.Email},
+		{"status", bson.M{"$ne": "ARCHIVED"}},
+	}).Decode(&user)
+	if errors.Is(userErr, mongo.ErrNoDocuments) {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "User with this email doesn't exist")
+		return
+	}
+	if userErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.WriteResponse(w, "Internal server error")
+		return
+	}
+
+	helpers.HandleOtpCreation(w, r, resetRequest.Email, "FORGOT_PASSWORD")
+}
+
+/*
+@body
+
+	code,
+	email
+*/
+func confirmPasswordResetOtp(w http.ResponseWriter, r *http.Request) {
+	var resetOtpRequest models.PasswordResetOtpConfirmation
+	requestErr := utils.DecodeJSONRequest(r, &resetOtpRequest)
+	if requestErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Invalid request body")
+		return
+	}
+	if resetOtpRequest.Email == "" || resetOtpRequest.Code == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Email and code are required")
+		return
+	}
+
+	otpCollection := utils.GetDatabaseCollection("otp")
+	otpCtx, otpCancel := utils.GetDatabaseContext()
+	defer otpCancel()
+
+	var existingOtp models.OTP
+	otpSelectionErr := otpCollection.FindOne(otpCtx, bson.D{
+		{"operationType", "FORGOT_PASSWORD"},
+		{"code", resetOtpRequest.Code},
+		{"userEmail", resetOtpRequest.Email},
+	}).Decode(&existingOtp)
+
+	if errors.Is(otpSelectionErr, mongo.ErrNoDocuments) {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Invalid OTP")
+		return
+	}
+	if otpSelectionErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.WriteResponse(w, "Internal server error")
+		return
+	}
+
+	hasExceededAttemptCount, blockedTime, updatingOtpErr := helpers.OtpChecker(existingOtp)
+	if updatingOtpErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.WriteResponse(w, "Internal server error")
+		return
+	} else if hasExceededAttemptCount {
+		w.WriteHeader(http.StatusBadRequest)
+		message := "You've exceeded the limit of attempts. Please try again after " + strconv.Itoa(blockedTime) + " minutes"
+		utils.WriteResponse(w, message)
+		return
+	}
+
+	diff := utils.GetDifferenceAbsTwoDatesInMinutes(existingOtp.CreationDate, utils.GetCurrentDateToTime())
+	if diff > 5 {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "OTP has expired")
+		return
+	}
+
+	otpCollection.FindOneAndUpdate(otpCtx, bson.D{
+		{"_id", existingOtp.Id},
+	}, bson.D{
+		{"$set", bson.D{
+			{"isVerified", true},
+		}},
+	})
+
+	w.WriteHeader(http.StatusOK)
+	utils.WriteResponse(w, "OTP confirmed successfully")
+}
+
+/*
+@body
+
+	email,
+	password,
+	passwordConfirmation
+*/
+func resetPassword(w http.ResponseWriter, r *http.Request) {
+	var resetPasswordRequest models.PasswordResetRequest
+	requestErr := utils.DecodeJSONRequest(r, &resetPasswordRequest)
+	if requestErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Invalid request body")
+		return
+	}
+	if resetPasswordRequest.Email == "" || resetPasswordRequest.Password == "" || resetPasswordRequest.PasswordConfirmation == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Email, password and password confirmation are required")
+		return
+	}
+	if resetPasswordRequest.Password != resetPasswordRequest.PasswordConfirmation {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "Password and confirmation do not match")
+		return
+	}
+
+	otpCollection := utils.GetDatabaseCollection("otp")
+	otpCtx, otpCancel := utils.GetDatabaseContext()
+	defer otpCancel()
+	var verifiedOtp models.OTP
+	otpErr := otpCollection.FindOne(otpCtx, bson.D{
+		{"userEmail", resetPasswordRequest.Email},
+		{"operationType", "FORGOT_PASSWORD"},
+		{"isVerified", true},
+	}).Decode(&verifiedOtp)
+	if errors.Is(otpErr, mongo.ErrNoDocuments) {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "OTP verification required")
+		return
+	}
+	if otpErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.WriteResponse(w, "Internal server error")
+		return
+	}
+
+	diff := utils.GetDifferenceAbsTwoDatesInMinutes(verifiedOtp.CreationDate, utils.GetCurrentDateToTime())
+	if diff > 10 {
+		w.WriteHeader(http.StatusBadRequest)
+		utils.WriteResponse(w, "OTP has expired")
+		return
+	}
+
+	usersCollection := utils.GetDatabaseCollection("users")
+	ctx, cancel := utils.GetDatabaseContext()
+	defer cancel()
+
+	_, updateErr := usersCollection.UpdateOne(ctx, bson.D{
+		{"email", resetPasswordRequest.Email},
+		{"status", bson.M{"$ne": "ARCHIVED"}},
+	}, bson.D{
+		{"$set", bson.D{
+			{"password", utils.GetHashedData(resetPasswordRequest.Password)},
+		}},
+	})
+	if updateErr != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		utils.WriteResponse(w, "Internal server error")
+		return
+	}
+
+	authSessionCollection := utils.GetDatabaseCollection("auth-session")
+	authSessionCollection.UpdateOne(ctx, bson.D{
+		{"userEmail", resetPasswordRequest.Email},
+	}, bson.D{
+		{"$set", bson.D{
+			{"connections", bson.A{}},
+		}},
+	})
+
+	w.WriteHeader(http.StatusOK)
+	utils.WriteResponse(w, "Password reset successfully")
+}
+
+func getMe(w http.ResponseWriter, r *http.Request) {
+	claims, ok := helpers.GetAuthClaims(r)
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		utils.WriteResponse(w, "Unauthorized")
+		return
+	}
+
+	response := map[string]any{
+		"sub":      claims["sub"],
+		"userId":   claims["userId"],
+		"username": claims["username"],
+		"email":    claims["email"],
+		"roles":    claims["roles"],
+	}
+
+	render.JSON(w, r, response)
 }
 
 func AuthRouter(r chi.Router) {
@@ -404,4 +821,9 @@ func AuthRouter(r chi.Router) {
 	r.Post("/signUp/email", sendSignUpEmailOtp)
 	r.Post("/signUp/otp", confirmSignUpOtp)
 	r.Post("/signUp/personal-details", addSignUpPersonalDetails)
+	r.Post("/reset-password/email", sendPasswordResetOtp)
+	r.Post("/reset-password/otp", confirmPasswordResetOtp)
+	r.Post("/reset-password", resetPassword)
+
+	r.With(helpers.AuthMiddleware).Get("/me", getMe)
 }

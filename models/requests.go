@@ -21,8 +21,29 @@ type SignUpEmailOtpConfirmation struct {
 }
 
 type SignUpPersonalDetailsRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email                string `json:"email"`
+	Password             string `json:"password"`
+	PasswordConfirmation string `json:"passwordConfirmation"`
+}
+
+type LogoutRequest struct {
+	Token        string `json:"token"`
+	RefreshToken string `json:"refreshToken"`
+}
+
+type PasswordResetEmailRequest struct {
+	Email string `json:"email"`
+}
+
+type PasswordResetOtpConfirmation struct {
+	Email string `json:"email"`
+	Code  string `json:"code"`
+}
+
+type PasswordResetRequest struct {
+	Email                string `json:"email"`
+	Password             string `json:"password"`
+	PasswordConfirmation string `json:"passwordConfirmation"`
 }
 
 // SendMailRequest for sending email
